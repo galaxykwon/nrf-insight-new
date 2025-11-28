@@ -60,13 +60,30 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
       mergedArticles = [...mergedArticles, ...googleArticles];
     }
 
-    // [C] ★★★ 엄격한 필터링 추가 (여기가 핵심!) ★★★
-    // 검색어가 '한국연구재단'을 포함하고 있다면, 결과물에도 반드시 그 단어가 있어야 함
+    // [C] 기존 필터: 한국연구재단
     if (topicQuery.includes('한국연구재단')) {
       mergedArticles = mergedArticles.filter(article => {
-        const titleHasIt = article.title.includes('한국연구재단');
-        const snippetHasIt = article.snippet.includes('한국연구재단');
-        return titleHasIt || snippetHasIt;
+        return article.title.includes('한국연구재단') || article.snippet.includes('한국연구재단');
+      });
+    }
+
+    // [D] ★★★ 신규 필터: RISE (대학/지역 문맥 체크) ★★★
+    // 쿼리에 'RISE'가 포함된 경우에만 작동
+    if (topicQuery.includes('RISE')) {
+      mergedArticles = mergedArticles.filter(article => {
+        // 제목과 내용을 합쳐서 대문자로 변환 (검사하기 쉽게)
+        const fullText = (article.title + " " + article.snippet).toUpperCase();
+        
+        // 기사에 'RISE'나 '라이즈'라는 단어가 있다면?
+        if (fullText.includes('RISE') || fullText.includes('라이즈')) {
+          // 반드시 아래 단어 중 하나라도 같이 있어야 합격! (듀스, 아이돌 제외 목적)
+          const mustHave = ['대학', '지역', '지자체', '교육', '공모', '사업', '지원', '혁신'];
+          const hasContext = mustHave.some(keyword => fullText.includes(keyword));
+          return hasContext;
+        }
+        
+        // RISE 관련 기사가 아니면(글로컬 등 다른 키워드면) 통과
+        return true;
       });
     }
 
