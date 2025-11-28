@@ -1,112 +1,123 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { SECTIONS } from './constants';
-import { NewsArticle, SectionType } from './types';
+import React, { useState, useEffect } from 'react';
 import { fetchNewsForTopic } from './services/geminiService';
-import Header from './components/Header';
-import BottomNav from './components/BottomNav';
-import NewsCard from './components/NewsCard';
-import SkeletonLoader from './components/SkeletonLoader';
+import { NewsArticle } from './types'; // types.ts 파일이 있다고 가정
+
+// [핵심] 요청하신 검색어 조합 (OR 검색 적용)
+const SECTIONS = {
+  NRF: { 
+    id: 'NRF', 
+    label: '재단소식', 
+    query: '한국연구재단' 
+  },
+  SCI: { 
+    id: 'SCI', 
+    label: '과기동향', 
+    query: '과학기술정보통신부 R&D' 
+  },
+  HUM: { 
+    id: 'HUM', 
+    label: '인문동향', 
+    query: '인문사회연구 | 인문학 | 사회과학' 
+  },
+  UNI: { 
+    id: 'UNI', 
+    label: '대학지원', 
+    query: '대학재정지원사업 | RISE | 글로컬대학 | 대학혁신지원사업 | 교원창업 | COSS | HUSS' 
+  }
+};
 
 const App: React.FC = () => {
-  const [activeSectionId, setActiveSectionId] = useState<SectionType>(SectionType.NRF_NEWS);
-  const [newsData, setNewsData] = useState<Record<SectionType, NewsArticle[]>>({
-    [SectionType.NRF_NEWS]: [],
-    [SectionType.SCI_TECH]: [],
-    [SectionType.HUMANITIES]: [],
-    [SectionType.UNI_SUPPORT]: []
-  });
+  const [activeTab, setActiveTab] = useState<string>('NRF');
+  // 뉴스 데이터 타입 정의
+  const [news, setNews] = useState<Record<string, NewsArticle[]>>({});
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const activeSection = SECTIONS.find(s => s.id === activeSectionId) || SECTIONS[0];
-
-  const loadNews = useCallback(async (sectionId: SectionType, forceRefresh = false) => {
-    // If we already have data and not forcing refresh, don't fetch
-    if (!forceRefresh && newsData[sectionId].length > 0) {
-      return;
-    }
+  const loadNews = async (tabId: string) => {
+    // 이미 불러온 데이터가 있으면 패스 (새로고침 제외)
+    if (news[tabId]) return;
 
     setLoading(true);
-    setError(null);
-
-    const section = SECTIONS.find(s => s.id === sectionId);
-    if (!section) return;
-
     try {
-      const articles = await fetchNewsForTopic(section.searchQuery);
-      setNewsData(prev => ({
-        ...prev,
-        [sectionId]: articles
-      }));
-    } catch (err) {
-      setError("뉴스 정보를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.");
-      console.error(err);
+      // @ts-ignore (SECTIONS 인덱싱 에러 방지)
+      const query = SECTIONS[tabId as keyof typeof SECTIONS].query;
+      const articles = await fetchNewsForTopic(query);
+      setNews(prev => ({ ...prev, [tabId]: articles }));
+    } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [newsData]);
-
-  // Initial load when tab changes
-  useEffect(() => {
-    loadNews(activeSectionId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSectionId]);
-
-  const handleRefresh = () => {
-    loadNews(activeSectionId, true);
   };
 
+  useEffect(() => {
+    loadNews(activeTab);
+  }, [activeTab]);
+
+  const handleRefresh = () => {
+    setNews(prev => {
+      const newState = { ...prev };
+      delete newState[activeTab];
+      return newState;
+    });
+    loadNews(activeTab);
+  };
+
+  // 현재 선택된 탭의 정보
+  const currentSection = SECTIONS[activeTab as keyof typeof SECTIONS];
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      {/* Container to simulate mobile width on desktop */}
-      <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen relative shadow-2xl shadow-gray-200">
-        
-        <Header 
-          currentSection={activeSection} 
-          onRefresh={handleRefresh} 
-          isLoading={loading} 
-        />
-
-        <main className="flex-1 pb-20 overflow-y-auto no-scrollbar">
-          {error && (
-            <div className="p-4 m-4 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm text-center">
-              {error}
-              <button 
-                onClick={handleRefresh}
-                className="block mx-auto mt-2 text-red-800 underline font-semibold"
-              >
-                다시 시도
-              </button>
-            </div>
-          )}
-
-          {loading && newsData[activeSectionId].length === 0 ? (
-            <SkeletonLoader />
-          ) : (
-            <div className="p-4 space-y-3">
-              {newsData[activeSectionId].length > 0 ? (
-                newsData[activeSectionId].map((article, index) => (
-                  <NewsCard key={`${article.url}-${index}`} article={article} />
-                ))
-              ) : (
-                !loading && !error && (
-                  <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                    <p>관련된 최신 뉴스가 없습니다.</p>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-          
-          {/* Add padding at bottom for content not to be hidden by nav */}
-          <div className="h-4"></div>
-        </main>
-
-        <BottomNav 
-          activeSection={activeSectionId} 
-          onSectionChange={setActiveSectionId} 
-        />
+    <div className="app-container">
+      {/* 헤더 */}
+      <div className="header">
+        <div>
+          <div style={{fontSize: '12px', color: '#888', fontWeight: 'bold'}}>KOREA RESEARCH FOUNDATION</div>
+          <h1 style={{margin: 0, fontSize: '24px', color: '#1a1f27'}}>NRF Insight</h1>
+        </div>
+        <img src="https://www.nrf.re.kr/resources/img/contents/character/nulph_intro.png" style={{width: '45px', borderRadius: '50%'}} alt="mascot" />
       </div>
+
+      {/* 탭 버튼들 */}
+      <div className="tab-container">
+        {Object.values(SECTIONS).map(section => (
+          <button 
+            key={section.id}
+            className={`tab-btn ${activeTab === section.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 새로고침 버튼 */}
+      <button className="refresh-btn" onClick={handleRefresh}>
+        🔄 {currentSection.label} 새로고침
+      </button>
+
+      {/* 뉴스 리스트 영역 */}
+      {loading && !news[activeTab] ? (
+        <div style={{textAlign: 'center', padding: '40px', color: '#3182F6'}}>
+          최신 뉴스를 불러오고 있습니다...
+        </div>
+      ) : (
+        <div>
+          {news[activeTab]?.map((item, idx) => (
+            <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="news-card">
+              <div>
+                <span className="tag">{item.source}</span>
+                <span className="date">{item.date}</span>
+              </div>
+              <h3 className="title" dangerouslySetInnerHTML={{__html: item.title}}></h3>
+              <p className="snippet" dangerouslySetInnerHTML={{__html: item.snippet}}></p>
+            </a>
+          ))}
+          {news[activeTab]?.length === 0 && (
+            <div style={{textAlign: 'center', color: '#888', marginTop: '20px'}}>
+              관련된 최신 뉴스가 없습니다.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
