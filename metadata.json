@@ -1,0 +1,5 @@
+{
+  "name": "NRF Insight",
+  "description": "A mobile-first news aggregator for National Research Foundation of Korea employees, tracking NRF news, Sci-Tech trends, Humanities trends, and University Support Projects.",
+  "requestFramePermissions": []
+}
