@@ -25,10 +25,6 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
       // [수정 2] 모델명을 공개된 최신 버전인 1.5-flash로 변경 (2.5는 에러 날 수 있음)
       model: "gemini-1.5-flash-latest",
       contents: prompt,
-      config: {
-        // 구글 검색 도구 사용 (API 키 권한에 따라 작동 안 할 수도 있음)
-        tools: [{ googleSearch: {} }],
-      },
     });
 
     const text = response.text || "";
