@@ -1,47 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { fetchNewsForTopic } from './services/geminiService';
-import { NewsArticle } from './types'; // types.ts 파일이 있다고 가정
+import { NewsArticle } from './types';
 
-// [핵심] 요청하신 검색어 조합 (OR 검색 적용)
-const SECTIONS = {
-  NRF: { 
-    id: 'NRF', 
-    label: '재단소식', 
-    query: '한국연구재단' 
-  },
-  SCI: { 
-    id: 'SCI', 
-    label: '과기동향', 
-    query: '과학기술정보통신부 R&D' 
-  },
-  HUM: { 
-    id: 'HUM', 
-    label: '인문동향', 
-    query: '인문사회연구 | 인문학 | 사회과학' 
-  },
-  UNI: { 
-    id: 'UNI', 
-    label: '대학지원', 
-    query: '대학재정지원사업 | RISE | 글로컬대학 | 대학혁신지원사업 | 교원창업 | COSS | HUSS' 
-  }
-};
+// [1] 검색어 설정 (성공한 OR 검색 키워드 유지)
+const SECTIONS = [
+  { id: 'NRF', label: '재단소식', query: '한국연구재단', icon: '🏢' },
+  { id: 'SCI', label: '과기동향', query: '과학기술정보통신부 R&D', icon: '⚛️' },
+  { id: 'HUM', label: '인문동향', query: '인문사회연구 | 인문학 | 사회과학', icon: '📖' },
+  { id: 'UNI', label: '대학지원', query: '대학재정지원사업 | RISE | 글로컬대학 | 대학혁신지원사업 | 교원창업 | COSS | HUSS', icon: '🎓' }
+];
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('NRF');
-  // 뉴스 데이터 타입 정의
+  const [activeTab, setActiveTab] = useState('NRF');
   const [news, setNews] = useState<Record<string, NewsArticle[]>>({});
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
 
   const loadNews = async (tabId: string) => {
-    // 이미 불러온 데이터가 있으면 패스 (새로고침 제외)
     if (news[tabId]) return;
 
     setLoading(true);
     try {
-      // @ts-ignore (SECTIONS 인덱싱 에러 방지)
-      const query = SECTIONS[tabId as keyof typeof SECTIONS].query;
-      const articles = await fetchNewsForTopic(query);
-      setNews(prev => ({ ...prev, [tabId]: articles }));
+      const target = SECTIONS.find(s => s.id === tabId);
+      if (target) {
+        const articles = await fetchNewsForTopic(target.query);
+        setNews(prev => ({ ...prev, [tabId]: articles }));
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -62,62 +45,114 @@ const App: React.FC = () => {
     loadNews(activeTab);
   };
 
-  // 현재 선택된 탭의 정보
-  const currentSection = SECTIONS[activeTab as keyof typeof SECTIONS];
+  const currentSection = SECTIONS.find(s => s.id === activeTab) || SECTIONS[0];
 
   return (
-    <div className="app-container">
-      {/* 헤더 */}
-      <div className="header">
+    // 전체 배경 및 폰트 설정
+    <div className="min-h-screen bg-[#F2F4F6] font-sans text-gray-900 pb-24">
+      
+      {/* --- 헤더 (고정) --- */}
+      <div className="bg-white px-5 py-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] sticky top-0 z-50 flex justify-between items-center rounded-b-3xl">
         <div>
-          <div style={{fontSize: '12px', color: '#888', fontWeight: 'bold'}}>KOREA RESEARCH FOUNDATION</div>
-          <h1 style={{margin: 0, fontSize: '24px', color: '#1a1f27'}}>NRF Insight</h1>
+          <div className="text-[11px] font-bold text-gray-400 mb-0.5 tracking-wide">KOREA RESEARCH FOUNDATION</div>
+          <h1 className="text-2xl font-black text-[#1a1f27] tracking-tight">NRF Insight</h1>
         </div>
-        <img src="https://www.nrf.re.kr/resources/img/contents/character/nulph_intro.png" style={{width: '45px', borderRadius: '50%'}} alt="mascot" />
+        <img 
+          src="https://www.nrf.re.kr/resources/img/contents/character/nulph_intro.png" 
+          alt="mascot" 
+          className="w-11 h-11 rounded-full border border-gray-100 shadow-sm bg-gray-50"
+        />
       </div>
 
-      {/* 탭 버튼들 */}
-      <div className="tab-container">
-        {Object.values(SECTIONS).map(section => (
+      {/* --- 메인 컨텐츠 --- */}
+      <main className="max-w-md mx-auto p-5">
+        
+        {/* 상단 탭 제목 & 새로고침 */}
+        <div className="flex items-center justify-between mb-5 px-1">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800">
+            <span className="text-2xl">{currentSection.icon}</span> {currentSection.label}
+          </h2>
           <button 
-            key={section.id}
-            className={`tab-btn ${activeTab === section.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(section.id)}
+            onClick={handleRefresh}
+            className="text-xs font-bold bg-white text-blue-600 px-3 py-1.5 rounded-full shadow-sm border border-blue-100 hover:bg-blue-50 active:scale-95 transition-all"
           >
-            {section.label}
+            🔄 새로고침
+          </button>
+        </div>
+
+        {/* 로딩 스켈레톤 UI */}
+        {loading && !news[activeTab] && (
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-white rounded-[20px] p-5 shadow-sm animate-pulse h-32 border border-white">
+                <div className="h-4 bg-gray-100 rounded w-1/4 mb-4"></div>
+                <div className="h-6 bg-gray-100 rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-gray-100 rounded w-full"></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 뉴스 리스트 */}
+        <div className="space-y-4">
+          {news[activeTab]?.map((item, idx) => (
+            <a 
+              key={idx} 
+              href={item.url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block bg-white rounded-[20px] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-white hover:border-blue-200 hover:shadow-md transition-all active:scale-[0.98]"
+            >
+              {/* 메타 정보 (언론사, 날짜) */}
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                  {item.source}
+                </span>
+                <span className="text-[11px] font-medium text-gray-400">{item.date}</span>
+              </div>
+              
+              {/* 제목 */}
+              <h3 
+                className="text-[17px] font-bold text-[#191F28] leading-[1.4] mb-2 break-keep"
+                dangerouslySetInnerHTML={{__html: item.title}}
+              ></h3>
+              
+              {/* 요약 */}
+              <p 
+                className="text-[13px] text-[#4E5968] leading-relaxed line-clamp-2"
+                dangerouslySetInnerHTML={{__html: item.snippet}}
+              ></p>
+            </a>
+          ))}
+        </div>
+
+        {/* 결과 없음 */}
+        {!loading && news[activeTab]?.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-[20px] border border-dashed border-gray-200 mt-4 shadow-sm">
+            <span className="text-4xl mb-3">📭</span>
+            <p className="font-medium">관련된 최신 뉴스가 없습니다.</p>
+          </div>
+        )}
+      </main>
+
+      {/* --- 하단 탭바 (Bottom Nav) --- */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 pb-safe pt-1 px-6 flex justify-between items-center z-50 h-[80px] shadow-[0_-5px_20px_rgba(0,0,0,0.03)] rounded-t-3xl">
+        {SECTIONS.map(section => (
+          <button
+            key={section.id}
+            onClick={() => setActiveTab(section.id)}
+            className="flex flex-col items-center justify-center w-full h-full gap-1.5 active:scale-90 transition-transform"
+          >
+            <span className={`text-2xl transition-all duration-300 ${activeTab === section.id ? '-translate-y-1 drop-shadow-md' : 'grayscale opacity-40'}`}>
+              {section.icon}
+            </span>
+            <span className={`text-[10px] font-bold transition-colors ${activeTab === section.id ? 'text-[#1a1f27]' : 'text-gray-300'}`}>
+              {section.label}
+            </span>
           </button>
         ))}
       </div>
 
-      {/* 새로고침 버튼 */}
-      <button className="refresh-btn" onClick={handleRefresh}>
-        🔄 {currentSection.label} 새로고침
-      </button>
-
-      {/* 뉴스 리스트 영역 */}
-      {loading && !news[activeTab] ? (
-        <div style={{textAlign: 'center', padding: '40px', color: '#3182F6'}}>
-          최신 뉴스를 불러오고 있습니다...
-        </div>
-      ) : (
-        <div>
-          {news[activeTab]?.map((item, idx) => (
-            <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="news-card">
-              <div>
-                <span className="tag">{item.source}</span>
-                <span className="date">{item.date}</span>
-              </div>
-              <h3 className="title" dangerouslySetInnerHTML={{__html: item.title}}></h3>
-              <p className="snippet" dangerouslySetInnerHTML={{__html: item.snippet}}></p>
-            </a>
-          ))}
-          {news[activeTab]?.length === 0 && (
-            <div style={{textAlign: 'center', color: '#888', marginTop: '20px'}}>
-              관련된 최신 뉴스가 없습니다.
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };
