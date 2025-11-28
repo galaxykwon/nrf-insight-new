@@ -1,12 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 import { NewsArticle } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// [수정 1] process.env 대신 Vite 방식인 import.meta.env 사용
+// (만약 에러가 계속 나면 이 줄을 const ai = new GoogleGenAI({ apiKey: "내_긴_API_키_직접_입력" }); 으로 바꾸셔도 됩니다)
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle[]> => {
   try {
-    // We request a JSON output directly to ensure we get clean titles and dates.
-    // We limit to 6 items for speed.
     const prompt = `
       Search for the latest (last 7 days) Korean news articles about "${topicQuery}". 
       Select the 6 most relevant and authoritative articles.
@@ -20,9 +22,11 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      // [수정 2] 모델명을 공개된 최신 버전인 1.5-flash로 변경 (2.5는 에러 날 수 있음)
+      model: "gemini-1.5-flash", 
       contents: prompt,
       config: {
+        // 구글 검색 도구 사용 (API 키 권한에 따라 작동 안 할 수도 있음)
         tools: [{ googleSearch: {} }],
       },
     });
@@ -37,9 +41,8 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
     try {
       articles = JSON.parse(cleanText);
     } catch (e) {
-      console.warn("Failed to parse JSON from model, falling back to grounding metadata if available", e);
-      // Fallback: If JSON parsing fails, try to use grounding chunks directly
-      // This is a safety net
+      console.warn("Failed to parse JSON, trying grounding metadata", e);
+      // Fallback logic
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
       if (groundingChunks) {
         articles = groundingChunks
@@ -59,17 +62,15 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
       }
     }
 
-    // Sort by date descending (YYYY.MM.DD string comparison works correctly)
+    // Sort by date
     articles.sort((a, b) => {
       const dateA = a.date || '';
       const dateB = b.date || '';
-      // Newest date (larger string) should come first
       return dateB.localeCompare(dateA);
     });
 
-    // Post-processing to ensure quality
+    // Post-processing
     return articles.map(article => {
-      // Format date: 2024.05.21 -> 05.21 for display
       let displayDate = article.date || '';
       if (/^\d{4}\.\d{2}\.\d{2}$/.test(displayDate)) {
         displayDate = displayDate.substring(5);
@@ -77,8 +78,7 @@ export const fetchNewsForTopic = async (topicQuery: string): Promise<NewsArticle
 
       return {
         ...article,
-        // If title looks like a URL, try to make it prettier (though model should have handled this)
-        title: article.title.startsWith('http') ? '관련 기사 (제목 없음)' : article.title,
+        title: article.title.startsWith('http') ? '관련 기사' : article.title,
         date: displayDate,
         source: article.source || 'News'
       };
